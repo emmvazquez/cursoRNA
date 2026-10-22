@@ -116,3 +116,5 @@ with torch.no_grad():
 
 print(f"\nPrueba individual:")
 print(f"Etiqueta real: {sample_true_label} | Prediccion de la red: {predicted_digit}")
+torch.save(model.state_dict(), "digit_model.pth")
+

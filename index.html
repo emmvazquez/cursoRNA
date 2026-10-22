@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Reconocimiento de Dígitos 8x8</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: monospace; }
+    body { background-color: #121212; color: #e0e0e0; display: flex; justify-content: center; padding: 2rem; }
+    .container { max-width: 600px; width: 100%; background: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333; }
+    .grid { display: grid; grid-template-columns: repeat(8, 36px); grid-gap: 2px; justify-content: center; margin: 1.5rem 0; }
+    .cell {
+      width: 36px; height: 36px; border: 1px solid #444; border-radius: 2px;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none;
+    }
+    .actions { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem; }
+    button {
+      padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer;
+      font-weight: bold; background-color: #2b2b2b; color: #fff; border: 1px solid #555;
+    }
+    button:hover { background-color: #3b3b3b; }
+    button.primary { background-color: #2563eb; border-color: #1d4ed8; }
+    button.primary:hover { background-color: #1d4ed8; }
+    .result-box {
+      background: #252525; padding: 1rem; border-radius: 6px; text-align: center;
+      margin-top: 1rem; border: 1px solid #3a3a3a;
+    }
+    .digit-output { font-size: 3rem; font-weight: bold; color: #38bdf8; margin: 0.5rem 0; }
+    .bars { display: flex; flex-direction: column; gap: 4px; margin-top: 1rem; }
+    .bar-row { display: flex; align-items: center; font-size: 0.8rem; }
+    .bar-label { width: 20px; text-align: right; margin-right: 8px; }
+    .bar-track { flex-grow: 1; background: #333; height: 10px; border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; background: #38bdf8; transition: width 0.2s; }
+    .bar-val { width: 45px; text-align: right; margin-left: 8px; }
+  </style>
+</head>
+<body>
+
+<div id="app" class="container">
+  <h2>Matriz de Entrada (8x8)</h2>
+  <p style="font-size: 0.85rem; color: #888;">
+    Haz clic en las celdas para pintar o incrementar el valor del pixel (rango 0 a 16).
+  </p>
+
+  <div class="grid">
+    <div 
+      v-for="(val, index) in flatGrid" 
+      :key="index" 
+      class="cell"
+      :style="{ backgroundColor: getCellColor(val) }"
+      @click="toggleCell(index)"
+      @contextmenu.prevent="clearCell(index)"
+    >
+      <span v-if="val > 0" :style="{ color: val > 8 ? '#000' : '#fff', fontSize: '0.65rem' }">
+        {{ val }}
+      </span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" @click="sendPrediction" :disabled="loading">
+      {{ loading ? 'Evaluando...' : 'Reconocer Dígito' }}
+    </button>
+    <button @click="resetGrid">Limpiar</button>
+  </div>
+
+  <div v-if="predictionResult !== null" class="result-box">
+    <div>Predicción del modelo</div>
+    <div class="digit-output">{{ predictionResult }}</div>
+
+    <div class="bars">
+      <div v-for="(prob, digit) in probabilities" :key="digit" class="bar-row">
+        <span class="bar-label">{{ digit }}:</span>
+        <div class="bar-track">
+          <div class="bar-fill" :style="{ width: (prob * 100) + '%' }"></div>
+        </div>
+        <span class="bar-val">{{ (prob * 100).toFixed(1) }}%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const { createApp, ref, computed } = Vue;
+
+  createApp({
+    setup() {
+      // Matriz de 8x8 inicializada en 0 (valores de 0 a 16 como en el dataset)
+      const grid = ref(Array.from({ length: 8 }, () => Array(8).fill(0)));
+      const predictionResult = ref(null);
+      const probabilities = ref([]);
+      const loading = ref(false);
+
+      const flatGrid = computed(() => grid.value.flat());
+
+      function getCellColor(val) {
+        // Escala proporcional de grises
+        const intensity = Math.round((val / 16) * 255);
+        return `rgb(${intensity}, ${intensity}, ${intensity})`;
+      }
+
+      function toggleCell(index) {
+        const row = Math.floor(index / 8);
+        const col = index % 8;
+        // Incrementa la intensidad en pasos de 4 hasta llegar a 16
+        grid.value[row][col] = grid.value[row][col] >= 16 ? 0 : grid.value[row][col] + 4;
+      }
+
+      function clearCell(index) {
+        const row = Math.floor(index / 8);
+        const col = index % 8;
+        grid.value[row][col] = 0;
+      }
+
+      function resetGrid() {
+        grid.value = Array.from({ length: 8 }, () => Array(8).fill(0));
+        predictionResult.value = null;
+        probabilities.value = [];
+      }
+
+      async function sendPrediction() {
+        loading.value = true;
+        try {
+          // Normalizar entre 0.0 y 1.0 (dividiendo entre 16)
+          const normalizedMatrix = grid.value.map(row => 
+            row.map(cell => cell / 16.0)
+          );
+
+          const response = await fetch("http://localhost:8000/predict", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ matrix: normalizedMatrix })
+          });
+
+          const data = await response.json();
+          predictionResult.value = data.prediction;
+          probabilities.value = data.probabilities;
+        } catch (error) {
+          console.error("Error al consultar el servicio:", error);
+          alert("No se pudo conectar con el servidor de FastAPI en el puerto 8000.");
+        } finally {
+          loading.value = false;
+        }
+      }
+
+      return {
+        flatGrid,
+        predictionResult,
+        probabilities,
+        loading,
+        getCellColor,
+        toggleCell,
+        clearCell,
+        resetGrid,
+        sendPrediction
+      };
+    }
+  }).mount('#app');
+</script>
+
+</body>
+</html>

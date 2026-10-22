@@ -86,3 +86,17 @@ preds = mlp.predict(X_xor)
 print("\nResultados finales sobre XOR:")
 for sample, target, pred in zip(X_xor, y_xor, preds):
     print(f"Entrada: {sample} | Esperado: {target} | Prediccion: {pred}")
+
+
+# Evaluacion con la compuerta AND
+X_xor = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+y_xor = np.array([0, 0, 0, 1])
+
+mlp = SimpleMLP(input_dim=2, hidden_dim=4, output_dim=1, learning_rate=0.8)
+print("Entrenando red MLP sobre AND...")
+mlp.fit(X_xor, y_xor, epochs=5001)
+
+preds = mlp.predict(X_xor)
+print("\nResultados finales sobre XOR:")
+for sample, target, pred in zip(X_xor, y_xor, preds):
+    print(f"Entrada: {sample} | Esperado: {target} | Prediccion: {pred}")
